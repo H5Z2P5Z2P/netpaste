@@ -114,6 +114,10 @@ body {
     font-size: 16px;
     line-height: 1.6;
     color: #333;
+    white-space: pre;
+    overflow: auto;
+    background: #fff;
+    tab-size: 4;
 }
 
 .sidebar {
@@ -271,41 +275,144 @@ body {
 @media (max-width: 768px) {
     .editor-container {
         flex-direction: column;
+        height: 100vh;
+    }
+
+    .main-editor {
+        order: 1;
+        height: 100%;
+        padding-bottom: 60px;
+        /* Space for bottom bar */
+        overflow-y: auto;
     }
 
     .sidebar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
         width: 100%;
-        height: auto;
-        order: -1;
-        padding: 10px;
+        height: 60px;
+        padding: 5px 15px;
+        background: #fff;
+        border-top: 1px solid #eee;
+        border-bottom: none;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+        display: flex;
         flex-direction: row;
-        overflow-x: auto;
-        border-bottom: 1px solid var(--border-color);
-        border-left: none;
-        white-space: nowrap;
+        /* Force row layout */
+        flex-wrap: nowrap;
         align-items: center;
+        justify-content: space-between;
+        /* Space content */
+        z-index: 100;
+        overflow-x: auto;
+        overflow-y: hidden;
+        /* Hide vertical scroll */
+        white-space: nowrap;
+        /* Prevent text wrapping */
     }
 
     .sidebar-section {
-        margin-bottom: 0;
-        margin-right: 15px;
+        margin: 0;
         display: flex;
+        gap: 15px;
         align-items: center;
-        gap: 10px;
     }
 
-    .tool-btn {
-        margin-bottom: 0;
-        width: auto;
+    /* Hide labels and extra sections on mobile to keep footer clean */
+    .sidebar label,
+    .sidebar-title,
+    .sidebar>div:nth-child(n+3) {
+        /* Hide Settings (3rd) and Share (4th) sections */
+        display: none !important;
     }
+
+    /* Transform buttons to icons-only or compact style for mobile */
+    .tool-btn {
+        border: none;
+        background: transparent;
+        padding: 8px;
+        margin: 0;
+        font-size: 1.2rem;
+        /* Larger icons */
+        color: #666;
+    }
+
+    .tool-btn span {
+        display: none;
+        /* Hide text label on mobile, show only icon */
+    }
+
+    .tool-btn:active {
+        color: var(--primary-color);
+        background: #f0f0f0;
+        border-radius: 50%;
+    }
+
+    /* Hide settings inputs that are too bulky for bottom bar, 
+       maybe show a 'Settings' icon to open modal instead? 
+       For now, let's keep basic actions and maybe hide complex settings 
+       or style them compactly */
 
     .status-bar {
-        margin-bottom: 0;
-        margin-right: 15px;
-        padding: 5px 10px;
+        margin: 0;
+        /* Reset margins for perfect centering */
+        font-size: 0.8rem;
+        padding: 2px 6px;
+        white-space: nowrap;
     }
 
-    .qr-placeholder {
+    /* Hide QR code and less critical stuff */
+    .qr-placeholder,
+    #urlDisplay,
+    .sidebar-section:nth-child(3) {
+        /* Hide share section text, we have copy button but it was inline text... 
+           Let's hide the text-based URL display and rely on a Copy button if we can add one 
+           specifically for mobile app bar */
         display: none;
+    }
+
+    /* We might need a specific 'Share' button for mobile if we hide the URL text */
+
+    .settings-input {
+        display: none;
+        /* Hide inputs to save space, bad UX to have them in bottom bar */
+    }
+
+    /* Ensure code area takes remaining space */
+    .editor-textarea {
+        padding: 15px;
+        font-size: 16px;
+        /* 16px prevents iOS zoom on focus */
+        min-height: calc(100vh - 60px);
+    }
+}
+
+.url-copy-text {
+    cursor: pointer;
+    color: var(--primary-color);
+    text-decoration: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    border-bottom: 1px dashed var(--primary-color);
+}
+
+.url-copy-text:hover {
+    background-color: #e3f2fd;
+    border-bottom-style: solid;
+}
+
+.url-copy-text:active {
+    background-color: #bbdefb;
+}
+
+.mobile-only {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .mobile-only {
+        display: block;
     }
 }

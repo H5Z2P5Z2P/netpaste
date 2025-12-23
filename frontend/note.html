@@ -7,13 +7,15 @@
     <title>NetPaste Editor - 极简网络剪贴板</title>
     <link rel="stylesheet" href="/assets/css/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet">
 </head>
 
 <body>
     <div class="editor-container">
         <!-- Main Editor Area -->
         <main class="main-editor">
-            <textarea id="noteContent" class="editor-textarea" placeholder="在此输入内容... 内容将自动保存，无需手动操作。"></textarea>
+            <div id="noteContent" class="editor-textarea language-javascript" style="outline:none; overflow:auto;">
+            </div>
         </main>
 
         <!-- Sidebar -->
@@ -24,14 +26,18 @@
 
             <div class="sidebar-section">
                 <div class="sidebar-title">操作</div>
-                <button class="tool-btn" onclick="copyContent()">
-                    <i class="fas fa-copy"></i> 复制内容
+                <button class="tool-btn" onclick="copyContent()" title="复制内容">
+                    <i class="fas fa-copy"></i> <span>复制内容</span>
                 </button>
-                <button class="tool-btn" onclick="downloadNote()">
-                    <i class="fas fa-download"></i> 导出文件
+                <button class="tool-btn" onclick="downloadNote()" title="导出文件">
+                    <i class="fas fa-download"></i> <span>导出文件</span>
                 </button>
-                <button class="tool-btn" onclick="location.href='/'">
-                    <i class="fas fa-plus"></i> 新建剪贴板
+                <button class="tool-btn" onclick="location.href='/'" title="新建">
+                    <i class="fas fa-plus"></i> <span>新建</span>
+                </button>
+                <!-- Mobile only Share button since we hid the URL text -->
+                <button class="tool-btn mobile-only" onclick="copyShareLink()" title="复制链接">
+                    <i class="fas fa-link"></i>
                 </button>
             </div>
 
@@ -57,7 +63,8 @@
                 <div id="qrcode" class="qr-placeholder">
                     二维码加载中...
                 </div>
-                <div style="margin-top:10px; font-size: 0.8rem; word-break: break-all; color:#999;" id="urlDisplay">
+                <div style="margin-top:10px; font-size: 0.8rem; word-break: break-all; color:#999;">
+                    <span id="urlDisplay" class="url-copy-text" onclick="copyShareLink()" title="点击复制链接"></span>
                 </div>
             </div>
         </aside>
@@ -79,7 +86,15 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+
+    <script type="module">
+        import { CodeJar } from 'https://cdn.jsdelivr.net/npm/codejar@3.7.0/codejar.min.js';
+
         class NetPasteEditor {
             constructor() {
                 this.noteName = this.getNoteName();
@@ -89,8 +104,17 @@
                 this.saveTimeout = null;
                 this.currentPassword = '';
 
+                // Initialize CodeJar
+                const highlight = editor => {
+                    // Simple auto-detect or default to none if complex
+                    // For now, let's just use Prism's basic highlighting
+                    Prism.highlightElement(editor);
+                };
+
+                this.jar = CodeJar(document.getElementById('noteContent'), highlight);
+
                 this.elements = {
-                    noteContent: document.getElementById('noteContent'),
+                    noteContent: document.getElementById('noteContent'), // Now a div
                     saveIndicator: document.getElementById('saveIndicator'),
                     notePassword: document.getElementById('notePassword'),
                     expireTime: document.getElementById('expireTime'),
@@ -156,23 +180,24 @@
                             localStorage.setItem(`netcut_pwd_${this.noteName}`, password);
                         }
 
-                        this.elements.noteContent.value = result.data.note_content || '';
+                        // Use CodeJar to set content
+                        this.jar.updateCode(result.data.note_content || '');
                         this.elements.expireTime.value = result.data.expire_time || 0;
 
                         this.updateStatus('就绪', 'saved');
                         this.elements.passwordModal.style.display = 'none';
                         this.elements.passwordError.style.display = 'none';
-                        // Re-enable editing if unlocked
-                        this.elements.noteContent.disabled = false;
+                        // Enable editing
+                        this.elements.noteContent.contentEditable = true;
                     } else if (result.error === '密码错误' || result.error === 'Password error') {
                         // Clear invalid password from storage
                         localStorage.removeItem(`netcut_pwd_${this.noteName}`);
 
                         this.elements.passwordModal.style.display = 'flex';
-                        this.elements.passwordError.style.display = password ? 'block' : 'none'; // Only show error if a password was attempted
+                        this.elements.passwordError.style.display = password ? 'block' : 'none';
                         this.updateStatus('需密码', 'error');
-                        // Disable editing while locked
-                        this.elements.noteContent.disabled = true;
+                        // Disable editing
+                        this.elements.noteContent.contentEditable = false;
                     } else {
                         this.updateStatus('加载失败', 'error');
                     }
@@ -190,13 +215,15 @@
                 try {
                     this.updateStatus('保存中...', 'unsaved');
 
+                    const content = this.jar.toString(); // Get content from CodeJar
+
                     const response = await fetch('/netcut/note/save/', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             note_name: this.noteName,
                             note_id: this.noteData.note_id,
-                            note_content: this.elements.noteContent.value,
+                            note_content: content,
                             note_token: this.currentToken,
                             expire_time: parseInt(this.elements.expireTime.value),
                             note_pwd: this.elements.notePassword.value || this.currentPassword
@@ -220,14 +247,17 @@
             updateStatus(text, type) {
                 const el = this.elements.saveIndicator;
                 el.textContent = text;
-                el.className = 'status-bar'; // reset
+                el.className = 'status-bar';
                 if (type === 'saved') el.classList.add('status-saved');
                 if (type === 'unsaved') el.classList.add('status-unsaved');
                 if (type === 'error') el.classList.add('status-error');
             }
 
             bindEvents() {
-                this.elements.noteContent.addEventListener('input', () => {
+                // CodeJar handles input events, we listen to updates via callback if needed,
+                // or just standard input event on the div? 
+                // CodeJar accepts an onUpdate callback.
+                this.jar.onUpdate(code => {
                     this.updateStatus('输入中...', 'unsaved');
                     clearTimeout(this.saveTimeout);
                     this.saveTimeout = setTimeout(() => this.saveNoteContent(), 1000);
@@ -247,31 +277,41 @@
 
         let editor;
         window.onload = () => {
-            editor = new NetPasteEditor();
+            // Expose globally for HTML onclick handlers
+            window.netPasteEditor = new NetPasteEditor();
         };
 
-        function submitPassword() {
+        // Attach global functions to window so onclick works
+        window.submitPassword = function () {
             const pwd = document.getElementById('passwordInput').value;
-            editor.loadNoteContent(pwd);
+            window.netPasteEditor.loadNoteContent(pwd);
         }
 
-        function copyContent() {
-            const content = document.getElementById('noteContent');
-            content.select();
-            document.execCommand('copy');
-            editor.updateStatus('已复制!', 'saved');
-            setTimeout(() => editor.updateStatus('就绪', 'saved'), 2000);
+        window.copyContent = function () {
+            const content = window.netPasteEditor.jar.toString();
+            navigator.clipboard.writeText(content).then(() => {
+                window.netPasteEditor.updateStatus('已复制!', 'saved');
+                setTimeout(() => window.netPasteEditor.updateStatus('就绪', 'saved'), 2000);
+            });
         }
 
-        function downloadNote() {
-            const content = document.getElementById('noteContent').value;
+        window.downloadNote = function () {
+            const content = window.netPasteEditor.jar.toString();
             const blob = new Blob([content], { type: 'text/plain' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = editor.noteName + '.txt';
+            a.download = window.netPasteEditor.noteName + '.txt';
             a.click();
             window.URL.revokeObjectURL(url);
+        }
+
+        window.copyShareLink = function () {
+            const url = window.location.href;
+            navigator.clipboard.writeText(url).then(() => {
+                window.netPasteEditor.updateStatus('链接已复制!', 'saved');
+                setTimeout(() => window.netPasteEditor.updateStatus('就绪', 'saved'), 2000);
+            });
         }
     </script>
 </body>

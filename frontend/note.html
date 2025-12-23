@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetPaste Editor - 极简网络剪贴板</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="editor-container">
+        <!-- Main Editor Area -->
+        <main class="main-editor">
+            <textarea id="noteContent" class="editor-textarea" placeholder="在此输入内容... 内容将自动保存，无需手动操作。"></textarea>
+        </main>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="status-bar status-saved" id="saveIndicator">
+                就绪
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">操作</div>
+                <button class="tool-btn" onclick="copyContent()">
+                    <i class="fas fa-copy"></i> 复制内容
+                </button>
+                <button class="tool-btn" onclick="downloadNote()">
+                    <i class="fas fa-download"></i> 导出文件
+                </button>
+                <button class="tool-btn" onclick="location.href='/'">
+                    <i class="fas fa-plus"></i> 新建剪贴板
+                </button>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">设置</div>
+
+                <label style="display:block; font-size:0.8rem; margin-bottom:5px; color:#666;">密码保护</label>
+                <input type="text" id="notePassword" class="settings-input" placeholder="设置访问密码...">
+
+                <label style="display:block; font-size:0.8rem; margin-bottom:5px; color:#666;">阅后即焚</label>
+                <select id="expireTime" class="settings-input">
+                    <option value="3600">1 小时</option>
+                    <option value="86400">1 天</option>
+                    <option value="259200" selected>3 天</option>
+                    <option value="604800">7 天</option>
+                    <option value="2592000">30 天</option>
+                    <option value="0">永久保存</option>
+                </select>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">分享</div>
+                <div id="qrcode" class="qr-placeholder">
+                    二维码加载中...
+                </div>
+                <div style="margin-top:10px; font-size: 0.8rem; word-break: break-all; color:#999;" id="urlDisplay">
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title">🔒 加密内容</div>
+            <p style="margin-bottom:15px; color:#666;">此剪贴板已设置密码保护，请输入密码访问。</p>
+            <input type="password" id="passwordInput" class="settings-input" placeholder="请输入密码" autofocus>
+            <p id="passwordError" style="color:red; font-size:0.8rem; display:none; margin-top:5px;">密码错误，请重试</p>
+
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="location.href='/'">取消</button>
+                <button class="btn-primary" onclick="submitPassword()">解锁</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        class NetPasteEditor {
+            constructor() {
+                this.noteName = this.getNoteName();
+                this.noteData = null;
+                this.currentToken = null;
+                this.isLoading = false;
+                this.saveTimeout = null;
+                this.currentPassword = '';
+
+                this.elements = {
+                    noteContent: document.getElementById('noteContent'),
+                    saveIndicator: document.getElementById('saveIndicator'),
+                    notePassword: document.getElementById('notePassword'),
+                    expireTime: document.getElementById('expireTime'),
+                    passwordModal: document.getElementById('passwordModal'),
+                    passwordInput: document.getElementById('passwordInput'),
+                    passwordError: document.getElementById('passwordError')
+                };
+
+                this.init();
+            }
+
+            getNoteName() {
+                const path = window.location.pathname;
+                const matches = path.match(/\/([^\/]+)\/?$/);
+                return matches ? matches[1] : 'demo';
+            }
+
+            async init() {
+                document.title = `${this.noteName} - NetPaste`;
+                document.getElementById('urlDisplay').textContent = window.location.href;
+
+                // Generate QR Code
+                const qrContainer = document.getElementById("qrcode");
+                qrContainer.innerHTML = '';
+                new QRCode(qrContainer, {
+                    text: window.location.href,
+                    width: 128,
+                    height: 128,
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+
+                // Auto-load password from localStorage
+                const savedPwd = localStorage.getItem(`netcut_pwd_${this.noteName}`);
+                await this.loadNoteContent(savedPwd || '');
+                this.bindEvents();
+            }
+
+            async loadNoteContent(password = '') {
+                try {
+                    this.isLoading = true;
+                    this.updateStatus('加载中...', 'loading');
+
+                    const response = await fetch('/netcut/note/info/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            note_name: this.noteName,
+                            note_pwd: password
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.status === 1) {
+                        this.noteData = result.data;
+                        this.currentToken = result.data.note_token;
+                        this.currentPassword = password;
+
+                        // Save correct password to localStorage
+                        if (password) {
+                            localStorage.setItem(`netcut_pwd_${this.noteName}`, password);
+                        }
+
+                        this.elements.noteContent.value = result.data.note_content || '';
+                        this.elements.expireTime.value = result.data.expire_time || 0;
+
+                        this.updateStatus('就绪', 'saved');
+                        this.elements.passwordModal.style.display = 'none';
+                        this.elements.passwordError.style.display = 'none';
+                        // Re-enable editing if unlocked
+                        this.elements.noteContent.disabled = false;
+                    } else if (result.error === '密码错误' || result.error === 'Password error') {
+                        // Clear invalid password from storage
+                        localStorage.removeItem(`netcut_pwd_${this.noteName}`);
+
+                        this.elements.passwordModal.style.display = 'flex';
+                        this.elements.passwordError.style.display = password ? 'block' : 'none'; // Only show error if a password was attempted
+                        this.updateStatus('需密码', 'error');
+                        // Disable editing while locked
+                        this.elements.noteContent.disabled = true;
+                    } else {
+                        this.updateStatus('加载失败', 'error');
+                    }
+                } catch (error) {
+                    console.error('Load error:', error);
+                    this.updateStatus('网络错误', 'error');
+                } finally {
+                    this.isLoading = false;
+                }
+            }
+
+            async saveNoteContent() {
+                if (this.isLoading || !this.currentToken) return;
+
+                try {
+                    this.updateStatus('保存中...', 'unsaved');
+
+                    const response = await fetch('/netcut/note/save/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            note_name: this.noteName,
+                            note_id: this.noteData.note_id,
+                            note_content: this.elements.noteContent.value,
+                            note_token: this.currentToken,
+                            expire_time: parseInt(this.elements.expireTime.value),
+                            note_pwd: this.elements.notePassword.value || this.currentPassword
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.status === 1) {
+                        this.currentToken = result.data.note_token;
+                        this.currentPassword = this.elements.notePassword.value || this.currentPassword;
+                        this.updateStatus('已保存', 'saved');
+                    } else {
+                        this.updateStatus('保存失败', 'error');
+                    }
+                } catch (error) {
+                    this.updateStatus('网络错误', 'error');
+                }
+            }
+
+            updateStatus(text, type) {
+                const el = this.elements.saveIndicator;
+                el.textContent = text;
+                el.className = 'status-bar'; // reset
+                if (type === 'saved') el.classList.add('status-saved');
+                if (type === 'unsaved') el.classList.add('status-unsaved');
+                if (type === 'error') el.classList.add('status-error');
+            }
+
+            bindEvents() {
+                this.elements.noteContent.addEventListener('input', () => {
+                    this.updateStatus('输入中...', 'unsaved');
+                    clearTimeout(this.saveTimeout);
+                    this.saveTimeout = setTimeout(() => this.saveNoteContent(), 1000);
+                });
+
+                this.elements.expireTime.addEventListener('change', () => this.saveNoteContent());
+                this.elements.notePassword.addEventListener('change', () => this.saveNoteContent());
+
+                document.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                        e.preventDefault();
+                        this.saveNoteContent();
+                    }
+                });
+            }
+        }
+
+        let editor;
+        window.onload = () => {
+            editor = new NetPasteEditor();
+        };
+
+        function submitPassword() {
+            const pwd = document.getElementById('passwordInput').value;
+            editor.loadNoteContent(pwd);
+        }
+
+        function copyContent() {
+            const content = document.getElementById('noteContent');
+            content.select();
+            document.execCommand('copy');
+            editor.updateStatus('已复制!', 'saved');
+            setTimeout(() => editor.updateStatus('就绪', 'saved'), 2000);
+        }
+
+        function downloadNote() {
+            const content = document.getElementById('noteContent').value;
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = editor.noteName + '.txt';
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+
+</html>

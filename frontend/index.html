@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetPaste - 网络剪贴板</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="home-container">
+        <h1 class="home-title">NetPaste</h1>
+
+        <div class="input-group">
+            <span class="input-prefix" id="urlPrefix">/</span>
+            <input type="text" class="home-input" id="noteNameInput" placeholder="输入自定义后缀，留空则随机生成" autocomplete="off"
+                autofocus>
+        </div>
+
+        <button class="btn-start" onclick="openNote()">开始使用</button>
+
+        <div style="margin-top: 3rem; color: #999; font-size: 0.9rem;">
+            <p>极简风格在线剪贴板</p>
+            <p>无需登录 • 自动保存 • 安全加密</p>
+        </div>
+    </div>
+
+    <script>
+        // Set prefix
+        document.getElementById('urlPrefix').textContent = window.location.host + '/';
+
+        function generateRandomName() {
+            return Math.random().toString(36).substring(2, 9);
+        }
+
+        function openNote() {
+            const input = document.getElementById('noteNameInput');
+            let name = input.value.trim();
+
+            if (!name) {
+                name = generateRandomName();
+            }
+
+            // Basic sanitization
+            name = name.replace(/[^a-zA-Z0-9-_]/g, '');
+
+            if (name) {
+                window.location.href = '/' + name + '/';
+            }
+        }
+
+        // Enter key support
+        document.getElementById('noteNameInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                openNote();
+            }
+        });
+    </script>
+</body>
+
+</html>

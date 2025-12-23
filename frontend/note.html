@@ -6,16 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NetPaste Editor - 极简网络剪贴板</title>
     <link rel="stylesheet" href="/assets/css/style.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet">
+    <link href="/assets/vendor/css/all.min.css" rel="stylesheet">
 </head>
 
 <body>
     <div class="editor-container">
         <!-- Main Editor Area -->
         <main class="main-editor">
-            <div id="noteContent" class="editor-textarea language-javascript" style="outline:none; overflow:auto;">
-            </div>
+            <!-- Native Textarea for robust input -->
+            <textarea id="noteContent" class="editor-textarea" placeholder="在此输入内容..." spellcheck="false"></textarea>
         </main>
 
         <!-- Sidebar -->
@@ -85,16 +84,9 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="/assets/vendor/js/qrcode.min.js"></script>
 
-    <script type="module">
-        import { CodeJar } from 'https://cdn.jsdelivr.net/npm/codejar@3.7.0/codejar.min.js';
-
+    <script>
         class NetPasteEditor {
             constructor() {
                 this.noteName = this.getNoteName();
@@ -104,17 +96,9 @@
                 this.saveTimeout = null;
                 this.currentPassword = '';
 
-                // Initialize CodeJar
-                const highlight = editor => {
-                    // Simple auto-detect or default to none if complex
-                    // For now, let's just use Prism's basic highlighting
-                    Prism.highlightElement(editor);
-                };
-
-                this.jar = CodeJar(document.getElementById('noteContent'), highlight);
-
+                // No external editor library. Using native textarea.
                 this.elements = {
-                    noteContent: document.getElementById('noteContent'), // Now a div
+                    noteContent: document.getElementById('noteContent'),
                     saveIndicator: document.getElementById('saveIndicator'),
                     notePassword: document.getElementById('notePassword'),
                     expireTime: document.getElementById('expireTime'),
@@ -180,15 +164,15 @@
                             localStorage.setItem(`netcut_pwd_${this.noteName}`, password);
                         }
 
-                        // Use CodeJar to set content
-                        this.jar.updateCode(result.data.note_content || '');
+                        // Set textarea content
+                        this.elements.noteContent.value = result.data.note_content || '';
                         this.elements.expireTime.value = result.data.expire_time || 0;
 
                         this.updateStatus('就绪', 'saved');
                         this.elements.passwordModal.style.display = 'none';
                         this.elements.passwordError.style.display = 'none';
                         // Enable editing
-                        this.elements.noteContent.contentEditable = true;
+                        this.elements.noteContent.disabled = false;
                     } else if (result.error === '密码错误' || result.error === 'Password error') {
                         // Clear invalid password from storage
                         localStorage.removeItem(`netcut_pwd_${this.noteName}`);
@@ -197,7 +181,7 @@
                         this.elements.passwordError.style.display = password ? 'block' : 'none';
                         this.updateStatus('需密码', 'error');
                         // Disable editing
-                        this.elements.noteContent.contentEditable = false;
+                        this.elements.noteContent.disabled = true;
                     } else {
                         this.updateStatus('加载失败', 'error');
                     }
@@ -215,7 +199,7 @@
                 try {
                     this.updateStatus('保存中...', 'unsaved');
 
-                    const content = this.jar.toString(); // Get content from CodeJar
+                    const content = this.elements.noteContent.value;
 
                     const response = await fetch('/netcut/note/save/', {
                         method: 'POST',
@@ -254,10 +238,8 @@
             }
 
             bindEvents() {
-                // CodeJar handles input events, we listen to updates via callback if needed,
-                // or just standard input event on the div? 
-                // CodeJar accepts an onUpdate callback.
-                this.jar.onUpdate(code => {
+                // Listen for native input events on textarea
+                this.elements.noteContent.addEventListener('input', () => {
                     this.updateStatus('输入中...', 'unsaved');
                     clearTimeout(this.saveTimeout);
                     this.saveTimeout = setTimeout(() => this.saveNoteContent(), 1000);
@@ -288,7 +270,7 @@
         }
 
         window.copyContent = function () {
-            const content = window.netPasteEditor.jar.toString();
+            const content = window.netPasteEditor.elements.noteContent.value;
             navigator.clipboard.writeText(content).then(() => {
                 window.netPasteEditor.updateStatus('已复制!', 'saved');
                 setTimeout(() => window.netPasteEditor.updateStatus('就绪', 'saved'), 2000);
@@ -296,7 +278,7 @@
         }
 
         window.downloadNote = function () {
-            const content = window.netPasteEditor.jar.toString();
+            const content = window.netPasteEditor.elements.noteContent.value;
             const blob = new Blob([content], { type: 'text/plain' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');

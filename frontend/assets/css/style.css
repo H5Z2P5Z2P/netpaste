@@ -111,7 +111,7 @@ body {
     resize: none;
     outline: none;
     font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Mono", "Droid Sans Mono", "Source Code Pro", monospace;
-    font-size: 16px;
+    font-size: clamp(12px, 0.9vw, 14px);
     line-height: 1.6;
     color: #333;
     white-space: pre;

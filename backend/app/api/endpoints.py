@@ -43,7 +43,7 @@ async def get_note_info(request: Request, req_data: NoteInfoRequest):
             "updated_time": current_time,
             "last_read_time": current_time,
             "read_count": 1,
-            "expire_time": 259200,
+            "expire_time": 2592000,
             "file_list": [],
             "log_list": [log_entry],
             "note_pwd": "",
